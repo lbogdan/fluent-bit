@@ -170,6 +170,28 @@ static char *tokens_to_msgpack(char *js,
     return buf;
 }
 
+static char *str_copy_replace(const char *src, int len, char search, char replace) {
+    char *dst = NULL;
+    int i;
+
+    dst = flb_malloc(len + 1);
+    if (!dst) {
+        flb_errno();
+        return NULL;
+    }
+
+    strncpy(dst, src, len);
+    dst[len] = '\0';
+
+    for(i = 0; i < len; i++) {
+        if (dst[i] == search) {
+            dst[i] = replace;
+        }
+    }
+
+    return dst;
+}
+
 /*
  * It parse a JSON string and convert it to MessagePack format, this packer is
  * useful when a complete JSON message exists, otherwise it will fail until
@@ -788,19 +810,35 @@ static flb_sds_t flb_msgpack_gelf_key(flb_sds_t *s, int in_array,
        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    char *prefix_key_copy;
+    char *key_copy;
+
+    if (prefix_key_len > 0) {
+        prefix_key_copy = str_copy_replace(prefix_key, prefix_key_len, '/', '_');
+        if (!prefix_key_copy) {
+            return NULL;
+        }
+    }
+
+    if (key_len > 0) {
+        key_copy = str_copy_replace(key, key_len, '/', '_');
+        if (!key_copy) {
+            return NULL;
+        }
+    }
 
     /* check valid key char [A-Za-z0-9_\.\-] */
     for(i=0; i < prefix_key_len; i++) {
-        if (!valid_char[(unsigned char)prefix_key[i]]) {
-            flb_debug("[%s] invalid key char '%.*s'",  __FUNCTION__,
-                      prefix_key_len, prefix_key);
+        if (!valid_char[(unsigned char)prefix_key_copy[i]]) {
+            flb_error("[%s] invalid prefix key char at pos %d: '%.*s'",  __FUNCTION__,
+                      i, prefix_key_len, prefix_key);
             return NULL;
         }
     }
     for(i=0; i < key_len; i++) {
-        if (!valid_char[(unsigned char)key[i]]) {
-            flb_debug("[%s] invalid key char '%.*s'",  __FUNCTION__,
-                      key_len, key);
+        if (!valid_char[(unsigned char)key_copy[i]]) {
+            flb_error("[%s] invalid key char at pos %d: '%.*s'",  __FUNCTION__,
+                      i, key_len, key);
             return NULL;
         }
     }
@@ -812,7 +850,8 @@ static flb_sds_t flb_msgpack_gelf_key(flb_sds_t *s, int in_array,
     }
 
     if (prefix_key_len > 0) {
-        tmp = flb_sds_cat(*s, prefix_key, prefix_key_len);
+        tmp = flb_sds_cat(*s, prefix_key_copy, prefix_key_len);
+        flb_free(prefix_key_copy);
         if (tmp == NULL) return NULL;
         *s = tmp;
     }
@@ -824,7 +863,8 @@ static flb_sds_t flb_msgpack_gelf_key(flb_sds_t *s, int in_array,
     }
 
     if (key_len > 0) {
-        tmp = flb_sds_cat(*s, key, key_len);
+        tmp = flb_sds_cat(*s, key_copy, key_len);
+        flb_free(key_copy);
         if (tmp == NULL) return NULL;
         *s = tmp;
     }
