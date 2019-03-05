@@ -810,20 +810,23 @@ static flb_sds_t flb_msgpack_gelf_key(flb_sds_t *s, int in_array,
        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-    char *prefix_key_copy;
-    char *key_copy;
+    char *prefix_key_copy = NULL;
+    char *key_copy = NULL;
+    flb_sds_t ret;
 
     if (prefix_key_len > 0) {
         prefix_key_copy = str_copy_replace(prefix_key, prefix_key_len, '/', '_');
         if (!prefix_key_copy) {
-            return NULL;
+            ret = NULL;
+            goto cleanup;
         }
     }
 
     if (key_len > 0) {
         key_copy = str_copy_replace(key, key_len, '/', '_');
         if (!key_copy) {
-            return NULL;
+            ret = NULL;
+            goto cleanup;
         }
     }
 
@@ -832,54 +835,82 @@ static flb_sds_t flb_msgpack_gelf_key(flb_sds_t *s, int in_array,
         if (!valid_char[(unsigned char)prefix_key_copy[i]]) {
             flb_error("[%s] invalid prefix key char at pos %d: '%.*s'",  __FUNCTION__,
                       i, prefix_key_len, prefix_key);
-            return NULL;
+            ret = NULL;
+            goto cleanup;
         }
     }
     for(i=0; i < key_len; i++) {
         if (!valid_char[(unsigned char)key_copy[i]]) {
             flb_error("[%s] invalid key char at pos %d: '%.*s'",  __FUNCTION__,
                       i, key_len, key);
-            return NULL;
+            ret = NULL;
+            goto cleanup;
         }
     }
 
     if (in_array == FLB_FALSE) {
         tmp = flb_sds_cat(*s, ", \"", 3);
-        if (tmp == NULL) return NULL;
+        if (tmp == NULL) {
+            ret = NULL;
+            goto cleanup;
+        }
         *s = tmp;
     }
 
     if (prefix_key_len > 0) {
         tmp = flb_sds_cat(*s, prefix_key_copy, prefix_key_len);
-        flb_free(prefix_key_copy);
-        if (tmp == NULL) return NULL;
+        if (tmp == NULL) {
+            ret = NULL;
+            goto cleanup;
+        }
         *s = tmp;
     }
 
     if (concat == FLB_TRUE) {
         tmp = flb_sds_cat(*s, "_", 1);
-        if (tmp == NULL) return NULL;
+        if (tmp == NULL) {
+            ret = NULL;
+            goto cleanup;
+        }
         *s = tmp;
     }
 
     if (key_len > 0) {
         tmp = flb_sds_cat(*s, key_copy, key_len);
-        flb_free(key_copy);
-        if (tmp == NULL) return NULL;
+        if (tmp == NULL) {
+            ret = NULL;
+            goto cleanup;
+        }
         *s = tmp;
     }
 
     if (in_array == FLB_FALSE) {
         tmp = flb_sds_cat(*s, "\":", 2);
-        if (tmp == NULL) return NULL;
+        if (tmp == NULL) {
+            ret = NULL;
+            goto cleanup;
+        }
         *s = tmp;
     } else {
         tmp = flb_sds_cat(*s, "=", 1);
-        if (tmp == NULL) return NULL;
+        if (tmp == NULL) {
+            ret = NULL;
+            goto cleanup;
+        }
         *s = tmp;
     }
 
-    return *s;
+    ret = *s;
+
+cleanup:
+    if (prefix_key_copy) {
+        flb_free(prefix_key_copy);
+    }
+    if (key_copy) {
+        flb_free(key_copy);
+    }
+
+    return ret;
 }
 
 static flb_sds_t flb_msgpack_gelf_value(flb_sds_t *s, int quote,
